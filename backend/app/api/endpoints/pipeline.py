@@ -4,8 +4,8 @@ import shutil
 import uuid
 from pathlib import Path
 import sys
-
 import os
+
 project_root = Path(__file__).parents[4]
 MODEL_PATH = project_root / "data" / "models" / "pose_landmarker.task"
 os.environ["POSE_MODEL_PATH"] = str(MODEL_PATH)
@@ -13,6 +13,7 @@ sys.path.insert(0, str(project_root))
 
 from ai.pose.pose_estimator import extract_keypoints, get_body_measurements_from_keypoints
 from ai.segmentation.segmentor import segment_garment
+from ai.segmentation.size_recommender import recommend_size
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 
@@ -86,5 +87,31 @@ async def segmentation(file: UploadFile = File(...)):
             "mask_path": result["mask_path"]
         })
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/size-recommend")
+async def size_recommendation(
+    chest: float,
+    waist: float,
+    hip: float,
+    height: float = None,
+    weight: float = None,
+    gender: str = "unisex"
+):
+    """
+    Kullanıcı ölçülerine göre beden tavsiyesi yapar.
+    """
+    try:
+        result = recommend_size(
+            chest=chest,
+            waist=waist,
+            hip=hip,
+            height=height,
+            weight=weight,
+            gender=gender
+        )
+        return JSONResponse(result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
