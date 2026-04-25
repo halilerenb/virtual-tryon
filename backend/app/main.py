@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.endpoints.pipeline import router as pipeline_router
+from app.api.endpoints.users import router as users_router
 
 app = FastAPI(title="Virtual Try-On API", version="0.1.0")
 
@@ -13,6 +14,7 @@ app.add_middleware(
 )
 
 app.include_router(pipeline_router)
+app.include_router(users_router)
 
 @app.get("/health")
 async def health():
