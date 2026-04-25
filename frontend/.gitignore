@@ -22,3 +22,18 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Data folders
+data/uploads/*
+data/outputs/*
+backend/data/uploads/*
+backend/data/outputs/*
+
+# Model files
+data/models/*
+backend/data/models/*
+
+# Keep folder structure
+!data/uploads/.gitkeep
+!data/outputs/.gitkeep
+!data/models/.gitkeep
