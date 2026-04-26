@@ -1,4 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
+from pydantic import BaseModel
 from fastapi.responses import JSONResponse
 import shutil
 import uuid
@@ -25,9 +26,6 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 @router.post("/pose")
 async def pose_estimation(file: UploadFile = File(...)):
-    """
-    Kullanıcı fotoğrafından vücut keypoint'lerini çıkarır.
-    """
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Sadece görsel dosyaları kabul edilir")
 
@@ -60,9 +58,6 @@ async def pose_estimation(file: UploadFile = File(...)):
 
 @router.post("/segment")
 async def segmentation(file: UploadFile = File(...)):
-    """
-    Kıyafet görselinden arka planı kaldırır ve maske oluşturur.
-    """
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Sadece görsel dosyaları kabul edilir")
 
@@ -100,9 +95,6 @@ async def size_recommendation(
     weight: float = None,
     gender: str = "unisex"
 ):
-    """
-    Kullanıcı ölçülerine göre beden tavsiyesi yapar.
-    """
     try:
         result = recommend_size(
             chest=chest,
@@ -113,5 +105,22 @@ async def size_recommendation(
             gender=gender
         )
         return JSONResponse(result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class ScrapeRequest(BaseModel):
+    product_url: str
+
+@router.post("/scrape")
+async def scrape_product(request: ScrapeRequest):
+    try:
+        from ai.scraper.product_scraper import scrape_product_variants
+        result = await scrape_product_variants(request.product_url)
+        if not result["success"]:
+            raise HTTPException(status_code=422, detail=result["error"])
+        return JSONResponse(result)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
