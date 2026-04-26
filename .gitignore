@@ -11,3 +11,11 @@ dist/
 build/
 *.egg-info/
 .DS_Store
+
+# Backend data folders
+backend/data/uploads/*
+backend/data/outputs/*
+backend/data/models/*
+!backend/data/uploads/.gitkeep
+!backend/data/outputs/.gitkeep
+!backend/data/models/.gitkeep
