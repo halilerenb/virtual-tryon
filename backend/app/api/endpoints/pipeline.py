@@ -6,6 +6,8 @@ import uuid
 from pathlib import Path
 import sys
 import os
+import httpx
+import base64
 
 project_root = Path(__file__).parents[4]
 MODEL_PATH = project_root / "data" / "models" / "pose_landmarker.task"
@@ -22,6 +24,8 @@ UPLOAD_DIR = Path("data/uploads")
 OUTPUT_DIR = Path("data/outputs")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+COLAB_API_URL = "https://banshee-portal-various.ngrok-free.dev"
 
 
 @router.post("/pose")
@@ -112,6 +116,7 @@ async def size_recommendation(
 class ScrapeRequest(BaseModel):
     product_url: str
 
+
 @router.post("/scrape")
 async def scrape_product(request: ScrapeRequest):
     try:
@@ -122,5 +127,56 @@ async def scrape_product(request: ScrapeRequest):
         return JSONResponse(result)
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/virtual-tryon")
+async def virtual_tryon(
+    person_file: UploadFile = File(...),
+    garment_file: UploadFile = File(...),
+    mask_type: str = "upper"
+):
+    """
+    CatVTON ile sanal kıyafet denemesi yapar.
+    Colab'daki modele istek atar.
+    """
+    try:
+        person_bytes = await person_file.read()
+        garment_bytes = await garment_file.read()
+
+        person_b64 = base64.b64encode(person_bytes).decode()
+        garment_b64 = base64.b64encode(garment_bytes).decode()
+
+        async with httpx.AsyncClient(timeout=300) as client:
+            res = await client.post(
+                f"{COLAB_API_URL}/tryon",
+                json={
+                    "person_image": person_b64,
+                    "garment_image": garment_b64,
+                    "mask_type": mask_type
+                }
+            )
+
+        data = res.json()
+
+        if not data["success"]:
+            raise HTTPException(status_code=500, detail=data["error"])
+
+        result_bytes = base64.b64decode(data["result_image"])
+        file_id = str(uuid.uuid4())[:8]
+        result_path = OUTPUT_DIR / f"tryon_{file_id}.jpg"
+
+        with open(result_path, "wb") as f:
+            f.write(result_bytes)
+
+        return JSONResponse({
+            "success": True,
+            "result_path": str(result_path),
+            "file_id": file_id
+        })
+
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Model zaman aşımına uğradı")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
