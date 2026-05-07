@@ -1,6 +1,6 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
-from fastapi.responses import JSONResponse
 import shutil
 import uuid
 from pathlib import Path
@@ -137,10 +137,6 @@ async def virtual_tryon(
     garment_file: UploadFile = File(...),
     mask_type: str = "upper"
 ):
-    """
-    CatVTON ile sanal kıyafet denemesi yapar.
-    Colab'daki modele istek atar.
-    """
     try:
         person_bytes = await person_file.read()
         garment_bytes = await garment_file.read()
@@ -180,3 +176,12 @@ async def virtual_tryon(
         raise HTTPException(status_code=504, detail="Model zaman aşımına uğradı")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/tryon-result/{file_id}")
+async def get_tryon_result(file_id: str):
+    """Try-on sonuç görselini döndürür."""
+    result_path = OUTPUT_DIR / f"tryon_{file_id}.jpg"
+    if not result_path.exists():
+        raise HTTPException(status_code=404, detail="Sonuç bulunamadı")
+    return FileResponse(str(result_path), media_type="image/jpeg")

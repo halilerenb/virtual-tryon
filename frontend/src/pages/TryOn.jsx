@@ -12,6 +12,15 @@ const CATEGORIES = [
   { value: "dress", label: "👗 Elbise", desc: "Elbise, tulum" },
 ]
 
+const SIZE_LABELS = {
+  "XS": "XS — Çok Küçük",
+  "S": "S — Küçük",
+  "M": "M — Orta",
+  "L": "L — Büyük",
+  "XL": "XL — Çok Büyük",
+  "XXL": "XXL — 2X Büyük",
+}
+
 export default function TryOn() {
   const { token } = useAuth()
   const navigate = useNavigate()
@@ -63,29 +72,59 @@ export default function TryOn() {
     setError("")
 
     try {
-      let garmentFormData = new FormData()
-
+      let garmentBlob
       if (selectedVariant) {
         const imgRes = await fetch(selectedVariant.image_url)
-        const blob = await imgRes.blob()
-        const file = new File([blob], "garment.jpg", { type: "image/jpeg" })
-        garmentFormData.append("file", file)
+        garmentBlob = await imgRes.blob()
       } else {
-        garmentFormData.append("file", garmentFile)
+        garmentBlob = garmentFile
       }
 
-      const segRes = await axios.post(`${API}/pipeline/segment`, garmentFormData)
+      const maskType = category === "lower" ? "lower" : category === "dress" ? "overall" : "upper"
 
-      const personForm = new FormData()
-      personForm.append("file", personFile)
-      const poseRes = await axios.post(`${API}/pipeline/pose`, personForm)
+      const tryonForm = new FormData()
+      tryonForm.append("person_file", personFile)
+      tryonForm.append("garment_file", new File([garmentBlob], "garment.jpg", { type: "image/jpeg" }))
+      tryonForm.append("mask_type", maskType)
 
-      setResult({
-        segmentation: segRes.data,
-        pose: poseRes.data,
-        status: "processed"
+      const tryonRes = await axios.post(`${API}/pipeline/virtual-tryon`, tryonForm, {
+        timeout: 300000
       })
-      setStep(4)
+
+      if (tryonRes.data.success) {
+        let sizeRecommendation = null
+        try {
+          const measureRes = await axios.get(`${API}/users/measurements`, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+
+          const measurements = measureRes.data.measurements || measureRes.data
+          if (measurements && measurements.chest_cm) {
+            const sizeRes = await axios.post(`${API}/pipeline/size-recommend`, null, {
+              params: {
+                chest: measurements.chest_cm,
+                waist: measurements.waist_cm,
+                hip: measurements.hip_cm,
+                height: measurements.height_cm,
+                weight: measurements.weight_kg,
+                gender: measurements.gender || "unisex"
+              }
+            })
+            sizeRecommendation = sizeRes.data
+          }
+        } catch (e) {
+          console.log("Ölçü bilgisi alınamadı:", e)
+        }
+
+        setResult({
+          file_id: tryonRes.data.file_id,
+          result_path: tryonRes.data.result_path,
+          status: "completed",
+          sizeRecommendation
+        })
+        setStep(4)
+      }
+
     } catch (err) {
       setError("İşlem sırasında hata oluştu: " + (err.response?.data?.detail || err.message))
     } finally {
@@ -236,7 +275,7 @@ export default function TryOn() {
                 disabled={!personFile || loading}
                 className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition"
               >
-                {loading ? "İşleniyor..." : "Denemeyi Başlat →"}
+                {loading ? "İşleniyor... (3~4 dakika)" : "Denemeyi Başlat →"}
               </button>
             </div>
           </div>
@@ -244,28 +283,52 @@ export default function TryOn() {
 
         {step === 4 && result && (
           <div>
-            <h2 className="text-xl font-semibold mb-2">İşlem Tamamlandı</h2>
-            <p className="text-gray-400 text-sm mb-6">Pose ve segmentasyon başarıyla tamamlandı.</p>
+            <h2 className="text-xl font-semibold mb-2">Try-On Tamamlandı! 🎉</h2>
+            <p className="text-gray-400 text-sm mb-6">Kıyafet başarıyla denendi.</p>
+
+            {result.status === "completed" && (
+              <div className="mb-6">
+                <img
+                  src={`${API}/pipeline/tryon-result/${result.file_id}`}
+                  alt="Try-on sonucu"
+                  className="w-full rounded-2xl border border-gray-700"
+                  onError={e => e.target.style.display = 'none'}
+                />
+              </div>
+            )}
+
+            {result.sizeRecommendation ? (
+              <div className="bg-blue-900/30 border border-blue-700/50 rounded-2xl p-5 mb-4">
+                <p className="text-blue-300 text-sm font-semibold mb-1">📏 Beden Tavsiyesi</p>
+                <p className="text-white text-2xl font-bold">
+                  {SIZE_LABELS[result.sizeRecommendation.recommended_size] || result.sizeRecommendation.recommended_size}
+                </p>
+                {result.sizeRecommendation.fit_score && (
+                  <p className="text-blue-300 text-sm mt-1">
+                    Uyum skoru: %{Math.round(result.sizeRecommendation.fit_score * 100)}
+                  </p>
+                )}
+                {result.sizeRecommendation.notes && (
+                  <p className="text-gray-400 text-sm mt-1">{result.sizeRecommendation.notes}</p>
+                )}
+              </div>
+            ) : (
+              <div className="bg-gray-900/50 border border-gray-700 rounded-2xl p-4 mb-4">
+                <p className="text-gray-400 text-sm">
+                  💡 Beden tavsiyesi için profil sayfanızdan ölçülerinizi girin.
+                </p>
+              </div>
+            )}
 
             <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-3">
-              <div className="flex justify-between">
-                <span className="text-gray-400">Keypoint sayısı</span>
-                <span className="text-white font-semibold">{result.pose.keypoint_count}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Kıyafet kapsama</span>
-                <span className="text-white font-semibold">%{result.segmentation.mask_coverage_percent}</span>
-              </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Kategori</span>
                 <span className="text-white font-semibold">{category}</span>
               </div>
-            </div>
-
-            <div className="bg-blue-900/30 border border-blue-700/50 rounded-2xl p-4 mt-4">
-              <p className="text-blue-300 text-sm">
-                🚀 Try-on modeli entegrasyonu yakında eklenecek.
-              </p>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Durum</span>
+                <span className="text-green-400 font-semibold">✓ Tamamlandı</span>
+              </div>
             </div>
 
             <button
