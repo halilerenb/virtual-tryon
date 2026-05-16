@@ -2,6 +2,7 @@ import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "../context/AuthContext"
 import axios from "axios"
+import CameraCapture from "../components/CameraCapture"
 
 const API = "http://localhost:8000"
 
@@ -37,6 +38,7 @@ export default function TryOn() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [scrapeError, setScrapeError] = useState("")
+  const [showCamera, setShowCamera] = useState(false)
 
   const handleScrape = async () => {
     if (!productUrl) return
@@ -80,7 +82,11 @@ export default function TryOn() {
         garmentBlob = garmentFile
       }
 
-      const maskType = category === "lower" ? "lower" : category === "dress" ? "overall" : "upper"
+      const maskType =
+        category === "lower" ? "lower" :
+        category === "dress" ? "overall" :
+        category === "outer" ? "outer" :
+        "upper"
 
       const tryonForm = new FormData()
       tryonForm.append("person_file", personFile)
@@ -252,19 +258,30 @@ export default function TryOn() {
         {step === 3 && (
           <div>
             <h2 className="text-xl font-semibold mb-2">Fotoğrafın</h2>
-            <p className="text-gray-400 text-sm mb-6">Önden çekilmiş, tam boy bir fotoğraf yükle</p>
+            <p className="text-gray-400 text-sm mb-6">Kamera ile çek veya galeriden yükle</p>
 
-            <input
-              type="file"
-              accept="image/*"
-              onChange={e => setPersonFile(e.target.files[0])}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-gray-400 file:mr-4 file:py-1 file:px-4 file:rounded file:border-0 file:text-sm file:bg-blue-600 file:text-white"
-            />
+            <div className="space-y-4">
+              <button
+                onClick={() => setShowCamera(true)}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-4 rounded-xl transition flex items-center justify-center gap-2"
+              >
+                📸 Kamera ile Çek
+              </button>
 
-            {personFile && (
-              <img src={URL.createObjectURL(personFile)} alt="person"
-                className="w-48 h-64 object-cover rounded-xl border border-gray-700 mx-auto mt-4" />
-            )}
+              <div className="text-center text-gray-600 text-sm">— veya galeriden yükle —</div>
+
+              <input
+                type="file"
+                accept="image/*"
+                onChange={e => setPersonFile(e.target.files[0])}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-gray-400 file:mr-4 file:py-1 file:px-4 file:rounded file:border-0 file:text-sm file:bg-blue-600 file:text-white"
+              />
+
+              {personFile && (
+                <img src={URL.createObjectURL(personFile)} alt="person"
+                  className="w-48 h-64 object-cover rounded-xl border border-gray-700 mx-auto mt-4" />
+              )}
+            </div>
 
             {error && <p className="text-red-400 text-sm mt-4">{error}</p>}
 
@@ -278,6 +295,13 @@ export default function TryOn() {
                 {loading ? "İşleniyor... (3~4 dakika)" : "Denemeyi Başlat →"}
               </button>
             </div>
+
+            {showCamera && (
+              <CameraCapture
+                onCapture={(file) => setPersonFile(file)}
+                onClose={() => setShowCamera(false)}
+              />
+            )}
           </div>
         )}
 
